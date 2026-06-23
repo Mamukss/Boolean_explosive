@@ -1,0 +1,83 @@
+from dataclasses import dataclass
+from itertools import product
+
+
+@dataclass
+class Order:
+    paid: bool = False
+    shipped: bool = False
+    delivered: bool = False
+    cancelled: bool = False
+    refunded: bool = False
+    returned: bool = False
+
+
+def is_valid(order: Order) -> bool:
+
+    if order.delivered and not order.shipped:
+        return False
+
+    if order.shipped and not order.paid:
+        return False
+
+    if order.refunded and not order.paid:
+        return False
+
+    if order.cancelled and (
+        order.shipped
+        or order.delivered
+        or order.refunded
+        or order.returned
+    ):
+        return False
+
+    if order.returned and not order.delivered:
+        return False
+
+    return True
+
+
+fields = [
+    "paid",
+    "shipped",
+    "delivered",
+    "cancelled",
+    "refunded",
+    "returned"
+]
+
+all_states = []
+
+for values in product([False, True], repeat=len(fields)):
+    kwargs = dict(zip(fields, values))
+    all_states.append(Order(**kwargs))
+
+valid_states = [o for o in all_states if is_valid(o)]
+invalid_states = [o for o in all_states if not is_valid(o)]
+
+print("=== BOOLEAN EXPLOSION ===")
+
+print("Total states :", len(all_states))
+print("Valid states :", len(valid_states))
+print("Invalid states :", len(invalid_states))
+
+print("\n=== SUCCESS CASE ===")
+
+valid_order = Order(
+    paid=True,
+    shipped=True,
+    delivered=True
+)
+
+print(valid_order)
+
+print("\n=== FAILURE CASE ===")
+
+invalid_order = Order(
+    paid=False,
+    shipped=True,
+    delivered=True,
+    refunded=True
+)
+
+print(invalid_order)
