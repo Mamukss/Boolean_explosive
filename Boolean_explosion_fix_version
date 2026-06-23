@@ -1,0 +1,132 @@
+"""
+Praktikum 7A. Boolean Explosion -- VERSI PERBAIKAN
+Solusi: Ganti 6 boolean independen dengan 1 Enum + State Machine eksplisit
+"""
+import sys
+from enum import Enum
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import List
+# Paksa output ke UTF-8
+sys.stdout.reconfigure(encoding="utf-8")
+# ─────────────────────────────────────────────
+# 1. DEFINISI STATE (Enum)
+# ─────────────────────────────────────────────
+class OrderStatus(Enum):
+    PENDING   = "pending"    # Dibuat, belum dibayar
+    PAID      = "paid"       # Sudah dibayar
+    SHIPPED   = "shipped"    # Sudah dikirim
+    DELIVERED = "delivered"  # Sudah diterima
+    CANCELLED = "cancelled"  # Dibatalkan
+    RETURNED  = "returned"   # Barang dikembalikan
+    REFUNDED  = "refunded"   # Uang dikembalikan
+# ─────────────────────────────────────────────
+# 2. TRANSISI YANG DIIZINKAN (State Machine)
+# ─────────────────────────────────────────────
+VALID_TRANSITIONS = {
+    OrderStatus.PENDING:   [OrderStatus.PAID, OrderStatus.CANCELLED],
+    OrderStatus.PAID:      [OrderStatus.SHIPPED, OrderStatus.CANCELLED, OrderStatus.REFUNDED],
+    OrderStatus.SHIPPED:   [OrderStatus.DELIVERED],
+    OrderStatus.DELIVERED: [OrderStatus.RETURNED],
+    OrderStatus.RETURNED:  [OrderStatus.REFUNDED],
+    OrderStatus.CANCELLED: [],   # state final
+    OrderStatus.REFUNDED:  [],   # state final
+}
+# ─────────────────────────────────────────────
+# 3. MODEL ORDER
+# ─────────────────────────────────────────────
+@dataclass
+class Order:
+    order_id: str
+    status: OrderStatus = OrderStatus.PENDING
+    history: List[dict] = field(default_factory=list, repr=False)
+    def _transition(self, new_status: OrderStatus, actor: str):
+        allowed = VALID_TRANSITIONS.get(self.status, [])
+        if new_status not in allowed:
+            raise ValueError(
+                f"[Order #{self.order_id}] Transisi tidak valid: "
+                f"'{self.status.value}' -> '{new_status.value}'\n"
+                f"  Diizinkan: {[s.value for s in allowed] or 'tidak ada (state final)'}"
+            )
+        self.history.append({
+            "dari" : self.status.value,
+            "ke"   : new_status.value,
+            "actor": actor,
+            "waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        self.status = new_status
+    def pay(self,         actor="customer"):   self._transition(OrderStatus.PAID,      actor)
+    def ship(self,        actor="warehouse"):  self._transition(OrderStatus.SHIPPED,   actor)
+    def deliver(self,     actor="courier"):    self._transition(OrderStatus.DELIVERED, actor)
+    def cancel(self,      actor="customer"):   self._transition(OrderStatus.CANCELLED, actor)
+    def return_item(self, actor="customer"):   self._transition(OrderStatus.RETURNED,  actor)
+    def refund(self,      actor="finance"):    self._transition(OrderStatus.REFUNDED,  actor)
+    def print_history(self):
+        print(f"\n  Riwayat Order #{self.order_id}:")
+        for i, e in enumerate(self.history, 1):
+            print(f"    {i}. [{e['waktu']}] {e['actor']}: {e['dari']} -> {e['ke']}")
+# ─────────────────────────────────────────────
+# 4. DEMONSTRASI
+# ─────────────────────────────────────────────
+print("=" * 50)
+print("  VERSI PERBAIKAN -- Enum + State Machine")
+print("=" * 50)
+print(f"\n[Perbandingan Ruang State]")
+print(f"  Versi lama (6 boolean) : 2^6 = 64 kombinasi, ~14 valid (~22%)")
+print(f"  Versi baru (1 Enum)    : {len(OrderStatus)} state, {len(OrderStatus)} valid (100%)")
+# ── Skenario 1: Alur normal ──
+print("\n" + "-" * 50)
+print("SKENARIO 1: Alur Normal (Sukses)")
+print("-" * 50)
+order1 = Order(order_id="ORD-001")
+order1.pay()
+order1.ship()
+order1.deliver()
+print(f"  Status akhir: {order1.status.value}")
+order1.print_history()
+# ── Skenario 2: Pembatalan setelah bayar ──
+print("\n" + "-" * 50)
+print("SKENARIO 2: Pembatalan Setelah Bayar")
+print("-" * 50)
+order2 = Order(order_id="ORD-002")
+order2.pay()
+order2.cancel()
+print(f"  Status akhir: {order2.status.value}")
+order2.print_history()
+# ── Skenario 3: Return & Refund ──
+print("\n" + "-" * 50)
+print("SKENARIO 3: Return & Refund")
+print("-" * 50)
+order3 = Order(order_id="ORD-003")
+order3.pay()
+order3.ship()
+order3.deliver()
+order3.return_item()
+order3.refund()
+print(f"  Status akhir: {order3.status.value}")
+order3.print_history()
+# ── Skenario 4: Transisi tidak valid (dicegah otomatis) ──
+print("\n" + "-" * 50)
+print("SKENARIO 4: Transisi Tidak Valid (Dicegah Otomatis)")
+print("-" * 50)
+order4 = Order(order_id="ORD-004")
+print(f"  Status awal: {order4.status.value}")
+try:
+    order4.ship()   # ship tanpa pay -- harus gagal
+except ValueError as e:
+    print(f"  Ditolak: {e}")
+try:
+    order4.deliver()  # deliver tanpa ship -- harus gagal
+except ValueError as e:
+    print(f"  Ditolak: {e}")
+print(f"\n  Status tetap: {order4.status.value}  <- tidak berubah")
+# ── Ringkasan ──
+print("\n" + "=" * 50)
+print("  KESIMPULAN")
+print("=" * 50)
+print("""
+  1. Ganti 6 boolean -> 1 Enum  (64 state -> 7 state, semua valid)
+  2. Transisi hanya bisa lewat method resmi (pay, ship, dll)
+  3. State tidak valid tidak bisa dibuat secara tidak sengaja
+  4. Riwayat transisi tercatat otomatis
+""")
